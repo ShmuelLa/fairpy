@@ -25,7 +25,7 @@ class FractionalAllocation:
        agent1's bundle: {x,y,z},  value: 3.0
        agent2's bundle: {x,y,z},  value: 3.0
        <BLANKLINE>
-       >>> A.value_of_fractional_allocation()
+       >>> A.value_of_fractional_allocation()FractionalAllocation
        6.0
        >>> agent3 = AdditiveAgent({'x':1, 'y':2, 'z':3}, name="agent3")
        >>> agent4 = AdditiveAgent({'x':3, 'y':2, 'z':1}, name="agent4")
@@ -100,6 +100,12 @@ class FractionalAllocation:
                 agent_value = get_value_of_agent_in_alloc(self.agents[i_agent].valuation.map_good_to_value, self.map_item_to_fraction[i_agent])
                 result += "{}'s bundle: {},  value: {}\n".format(agent.name(),  agent_bundle, agent_value)
             return result
+
+    def get_agents_count(self):
+        """
+        Returns the amount of agents involved in the current allocation
+        """
+        return len(self.agents)
 
 
 # -------------------------Help functions for the Fractional Allocation class--------------------------------------------
