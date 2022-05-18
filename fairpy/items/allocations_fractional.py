@@ -101,12 +101,6 @@ class FractionalAllocation:
                 result += "{}'s bundle: {},  value: {}\n".format(agent.name(),  agent_bundle, agent_value)
             return result
 
-    def get_agents_count(self):
-        """
-        Returns the amount of agents involved in the current allocation
-        """
-        return len(self.agents)
-
 
 # -------------------------Help functions for the Fractional Allocation class--------------------------------------------
 """

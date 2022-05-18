@@ -19,8 +19,9 @@ from unittest import result
 import networkx as nx
 import matplotlib.pyplot as plt
 from fairpy.agents import AdditiveAgent, Bundle
-from fairpy.items.allocations_fractional import FractionalAllocation
-from networkx.algorithms import bipartite, find_cycle, complete_bipartite_graph
+from fairpy.items.allocations_fractional import FractionalAllocation, get_items_of_agent_in_alloc, get_value_of_agent_in_alloc
+from networkx.algorithms import bipartite, find_cycle
+from networkx.classes.function import create_empty_copy
 
 
 class ParetoImprovement:
@@ -37,38 +38,92 @@ class ParetoImprovement:
         self.linear_agents_fragments = {}
         self.linear_agent_fragments = {}
         self.former_allocation = fr_allocation
+        self.agents = fr_allocation.agents
         self.former_graph = graph
         self.items = items
         self.Gx_complete = None
-        self.result_T = nx.Graph()
+        self.result_T = None
+        self.current_iteration_cycle = None
+        self.init_complete_allocation = None
 
 
     def find_pareto_improvement(self) -> FractionalAllocation:
-        self.__construct_complete_bipartite_graph()
+        """
+        This is the modules main function which implements the 2nd algorithm presented in the article and is used as the
+        second stage in the po_and_prop1_allocation algorithm.
+
+        INPUT:
+        * fpo_alloc: A Pareto-optimal (PO) allocation corresponding to the given consumption graph.
+            The allocation is an allocation instance that includes sets of:
+            (Agents, Objects and their corresponding allocation)
+
+        OUTPUT:
+        * Fractional-Pareto-Optimal (fPO) that improves the former given allocation instance for which
+            the allocation graph Gx is acyclic
+        """
+        self.__initiate_algorithm_graphs()
         while not self.__is_acyclic():
-            print("zbi")
-        print(result_T)
-        nx.draw(result_T, with_labels = True)
-        plt.show()
-        return self.result
+            for edge in self.current_iteration_cycle:
+                tmp_edge = self.linear_programming_solve_optimal_value(edge)
+                if tmp_edge is None:
+                    continue
+                else:
+                    self.result_T.add_edge(*tmp_edge)
+                    self.Gx_complete.remove_edge(*tmp_edge)
+        return self.result_T
+
+
+    def sum_agents_with_fragment(self, allocation: FractionalAllocation):
+        """
+        A helper function that sums all the agent with the correspondingfragments allocation
+        according to a specific allocation. 
+        This function can we run on the former allocation and on the current new complete
+        graph allocation which will be removing edges with each linear algorithm iteration.
+        """
+        result = 0
+        for i_agent, agent in enumerate(allocation.agents):
+            current_agent_sum = 0
+            agent_utilitie_valuation = agent.valuation.map_good_to_value
+            agent_fragments = allocation.map_item_to_fraction[i_agent]
+            for item in self.items:
+                current_agent_sum += agent_fragments[item] * agent_utilitie_valuation[item]
+            result += current_agent_sum
+        return result
+
+    
+    def generate_allocation_from_cycle_edge(self, edge):
+        """
+        Converts a bipartite graph to a FractionalAllocation object
+        This function will be used to prepare the allocation for linear programming
+        calculation.
+
+        This function also makes sure that the result is not fragmented 
+        as required by the linear solving algporithm conditions
+        """
+        former_alloc_map = self.former_allocation.map_item_to_fraction
+        for agent in self.agents:
+            if agent == edge[0]:
+                for i_agent, alloc_agent in enumerate(self.agents):
+                    if alloc_agent == agent:
+                        former_alloc_map[i_agent][edge[1]] = 1.0
+                    else:
+                        former_alloc_map[i_agent][edge[1]] = 0
+        return FractionalAllocation(self.agents, former_alloc_map)
 
 
     def __is_acyclic(self) -> bool:
         """
         A helper function which checks if a given bipartite graph has cycles
         it will be used in every iteration in the main algorithms core while loop
-
-            NOTE:This si the only function that won't be tested at this stage because
-            it's based on networkx.
         """
         try:
-            find_cycle(self.Gx_complete)
+            self.current_iteration_cycle = find_cycle(self.Gx_complete)
             return False
         except nx.NetworkXNoCycle:
             return True
 
 
-    def __construct_complete_bipartite_graph(self):
+    def __initiate_algorithm_graphs(self):
         """
         A helper function that recevies the current item allocation between agents and 
         creates a complete bipartite graph from them connection all agents with all 
@@ -76,18 +131,18 @@ class ParetoImprovement:
         This function will be used for initializing the main class function.
         """
         result = nx.Graph()
-        for agent in self.former_allocation.agents:
+        for agent in self.agents:
             result.add_node(agent)
         for object in self.items:
             result.add_node(object)
-        for agent in self.former_allocation.agents:
+        for agent in self.agents:
             for object in self.items:
                 result.add_edge(agent, object)
         self.Gx_complete = result
+        self.result_T = create_empty_copy(self.Gx_complete, with_data=True)
 
 
-
-    def linear_programming_solve_optimal_value(fpo_alloc: FractionalAllocation) -> tuple:
+    def linear_programming_solve_optimal_value(self, edge):
         """
         Main linear programming help function which will receive the current allocation
         and find an optimal set for the current states results according to four mathematical
@@ -100,7 +155,11 @@ class ParetoImprovement:
             else, the boolean flag will be false and the second index will be empty.
             this will point the main function to stop.
         """
-
+        if type(edge[0]) is AdditiveAgent:
+            tmp_alloc = self.generate_allocation_from_cycle_edge(edge)
+            if self.sum_agents_with_fragment(tmp_alloc) < self.sum_agents_with_fragment(self.former_allocation):
+                return None
+        return edge
 
 
 if __name__ == "__main__":
@@ -126,24 +185,11 @@ if __name__ == "__main__":
     G.add_edge(agent2, 'a')
     G.add_edge(agent2, 'b')
     G.add_edge(agent2, 'd')
-
     pi = ParetoImprovement(initial_allocation, G, all_items)
     pi.find_pareto_improvement()
     
 
 """
-This is the modules main function which implements the 2nd algorithm presented in the article and is used as the
-second stage in the po_and_prop1_allocation algorithm.
-
-INPUT:
-* fpo_alloc: A Pareto-optimal (PO) allocation corresponding to the given consumption graph.
-The allocation is an allocation instance that includes sets of:
-    (Agents, Objects and their corresponding allocation)
-
-OUTPUT:
-* Fractional-Pareto-Optimal (fPO) that improves the former given allocation instance for which
-the allocation graph Gx is acyclic
-
 HW4 Tests:
 
 Example 1:
