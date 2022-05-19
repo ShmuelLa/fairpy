@@ -60,6 +60,17 @@ class ParetoImprovement:
         OUTPUT:
         * Fractional-Pareto-Optimal (fPO) that improves the former given allocation instance for which
             the allocation graph Gx is acyclic
+
+
+        TODO Notes:
+            call linear prog solve for T each iteration
+
+            use cxvy
+
+            test if a fractional allocation becomes unfrational
+
+            test if a fractional allocation becomes fracitonal up to 1 object
+        
         """
         self.__initiate_algorithm_graphs()
         while not self.__is_acyclic():
