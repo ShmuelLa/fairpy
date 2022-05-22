@@ -132,7 +132,13 @@ class ParetoImprovement:
 
     def __linear_prog_solve(self, edge):
         """
-            test if a fractional allocation becomes fracitonal up to 1 object
+        Main linear programming help function which will receive the current allocation
+        and find an optimal set for the current states results according to four mathematical
+        conditions represented in Algorithms 2.
+
+        OUTPUT:
+        * A tuple containing (edge, optimal_value).
+            The edge will be used to create and test the result graph for cycles with or without it
         """
         if type(edge[0]) is AdditiveAgent:
             tmp_alloc = self.generate_allocation_from_cycle_edge(edge)
