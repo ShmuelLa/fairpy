@@ -16,8 +16,10 @@ Since:  2022-04
 """
 
 from unittest import result
-import networkx as nx
+import cvxpy
+from fairpy import ValuationMatrix
 import matplotlib.pyplot as plt
+import networkx as nx
 from fairpy.agents import AdditiveAgent, Bundle
 from fairpy.items.allocations_fractional import FractionalAllocation, get_items_of_agent_in_alloc, get_value_of_agent_in_alloc
 from networkx.algorithms import bipartite, find_cycle
@@ -28,15 +30,11 @@ class ParetoImprovement:
     """
     Main pareto Improvement class, will nest methods in order to calculate pareto improvement.
     """
-
     def __init__(self, fr_allocation: FractionalAllocation, graph: bipartite, items: Bundle):
         """
         These are the main loops and values for linear programming inputs 
         that are stored for later calculation and testing.
         """
-        self.linear_calc_objects = 0.0
-        self.linear_agents_fragments = {}
-        self.linear_agent_fragments = {}
         self.former_allocation = fr_allocation
         self.agents = fr_allocation.agents
         self.former_graph = graph
@@ -45,6 +43,7 @@ class ParetoImprovement:
         self.result_T = None
         self.current_iteration_cycle = None
         self.init_complete_allocation = None
+        self.val_mat = convert_FractionalAllocation_to_ValuationMatrix(self.former_allocation)
 
 
     def find_pareto_improvement(self) -> FractionalAllocation:
@@ -60,46 +59,22 @@ class ParetoImprovement:
         OUTPUT:
         * Fractional-Pareto-Optimal (fPO) that improves the former given allocation instance for which
             the allocation graph Gx is acyclic
-
-
-        TODO Notes:
-            call linear prog solve for T each iteration
-
-            use cxvy
-
-            test if a fractional allocation becomes unfrational
-
-            test if a fractional allocation becomes fracitonal up to 1 object
-        
         """
         self.__initiate_algorithm_graphs()
         while not self.__is_acyclic():
             for edge in self.current_iteration_cycle:
-                tmp_edge = self.linear_programming_solve_optimal_value(edge)
-                if tmp_edge is None:
+                tmp_edge, tmp_iptimum = self.__linear_prog_solve(edge)
+                if tmp_edge is None or tmp_iptimum is None:
                     continue
                 else:
-                    self.result_T.add_edge(*tmp_edge)
-                    self.Gx_complete.remove_edge(*tmp_edge)
+                    tmp_result = self.result_T
+                    tmp_result.add_edge(*tmp_edge)
+                    if is_acyclic(self.result_T) and is_acyclic(tmp_result):
+                        self.result_T.add_edge(*tmp_edge)
+                        self.Gx_complete.remove_edge(*tmp_edge)
+        nx.draw(self.result_T, with_labels = True)
+        plt.show()
         return self.result_T
-
-
-    def sum_agents_with_fragment(self, allocation: FractionalAllocation):
-        """
-        A helper function that sums all the agent with the correspondingfragments allocation
-        according to a specific allocation. 
-        This function can we run on the former allocation and on the current new complete
-        graph allocation which will be removing edges with each linear algorithm iteration.
-        """
-        result = 0
-        for i_agent, agent in enumerate(allocation.agents):
-            current_agent_sum = 0
-            agent_utilitie_valuation = agent.valuation.map_good_to_value
-            agent_fragments = allocation.map_item_to_fraction[i_agent]
-            for item in self.items:
-                current_agent_sum += agent_fragments[item] * agent_utilitie_valuation[item]
-            result += current_agent_sum
-        return result
 
     
     def generate_allocation_from_cycle_edge(self, edge):
@@ -126,6 +101,8 @@ class ParetoImprovement:
         """
         A helper function which checks if a given bipartite graph has cycles
         it will be used in every iteration in the main algorithms core while loop
+        this class method is especialy used in order to save each iteration cycle
+        for edge testing in the algorithm
         """
         try:
             self.current_iteration_cycle = find_cycle(self.Gx_complete)
@@ -141,36 +118,78 @@ class ParetoImprovement:
         resources. 
         This function will be used for initializing the main class function.
         """
-        result = nx.Graph()
+        Gx_complete = nx.Graph()
         for agent in self.agents:
-            result.add_node(agent)
+            Gx_complete.add_node(agent)
         for object in self.items:
-            result.add_node(object)
+            Gx_complete.add_node(object)
         for agent in self.agents:
             for object in self.items:
-                result.add_edge(agent, object)
-        self.Gx_complete = result
+                Gx_complete.add_edge(agent, object)
+        self.Gx_complete = Gx_complete
         self.result_T = create_empty_copy(self.Gx_complete, with_data=True)
 
 
-    def linear_programming_solve_optimal_value(self, edge):
+    def __linear_prog_solve(self, edge):
         """
-        Main linear programming help function which will receive the current allocation
-        and find an optimal set for the current states results according to four mathematical
-        conditions represented in Algorithms 2.
-
-        OUTPUT:
-        * A tuple containing (bool, optimal_value).
-            The boolean value will be used as a flag in order to mark it the optimal value was found
-            if true, the value was found and will be placed in the tuple's second index.
-            else, the boolean flag will be false and the second index will be empty.
-            this will point the main function to stop.
+            test if a fractional allocation becomes fracitonal up to 1 object
         """
         if type(edge[0]) is AdditiveAgent:
             tmp_alloc = self.generate_allocation_from_cycle_edge(edge)
-            if self.sum_agents_with_fragment(tmp_alloc) < self.sum_agents_with_fragment(self.former_allocation):
-                return None
-        return edge
+            tmp_mat = convert_FractionalAllocation_to_ValuationMatrix(tmp_alloc)
+
+            # Creates [agens, object] constrained matrix for variable input
+            allocation_vars = cvxpy.Variable((tmp_mat.num_of_agents, tmp_mat.num_of_objects))
+
+            # line 5 in the algorithm, the max condition
+            sum_x = sum(allocation_vars[i][o] * tmp_mat[i][o] for o in tmp_mat.objects() for i in tmp_mat.agents())
+            sum_y = sum(allocation_vars[i][o] * self.val_mat[i][o] for o in self.val_mat.objects() for i in self.val_mat.agents())
+
+            first_constraints = [sum_x >= sum_y]
+            positivity_constraints = [
+                allocation_vars[i][o] >= 0 for i in tmp_mat.agents()
+                for o in tmp_mat.objects()
+            ]
+            feasibility_constraints = [
+                sum([allocation_vars[i][o] for i in tmp_mat.agents()])==1
+                for o in tmp_mat.objects()
+            ]
+            constraints = first_constraints + positivity_constraints + feasibility_constraints
+            problem = cvxpy.Problem(cvxpy.Maximize(sum_x), constraints)
+            opt = problem.solve(
+                #Uncomment this line in order to see all solving comments
+                # verbose=True
+                )
+            # print(opt)
+            return edge, opt
+        return None, None
+
+
+def is_acyclic(graph) -> bool:
+    """
+    A helper function which checks if a given graph has cycles
+    this function will be used to check the result graph for cycles
+    """
+    try:
+        find_cycle(graph)
+        return False
+    except nx.NetworkXNoCycle:
+        return True
+
+
+def convert_FractionalAllocation_to_ValuationMatrix(allocation: FractionalAllocation) -> ValuationMatrix:
+    """
+    A helper function that converts a FractionalAllocation object to ValuationMatrix
+    This function is used to prepare the matrix parameters for the linear solving process 
+    """
+    matrix_allocation_list = []
+    for agent_alloc in allocation.map_item_to_fraction:
+        agent_alloc_list = []
+        for _, alloc in agent_alloc.items():
+            agent_alloc_list.append(alloc)
+        matrix_allocation_list.append(agent_alloc_list)
+    v_mat = ValuationMatrix(matrix_allocation_list)
+    return v_mat
 
 
 if __name__ == "__main__":
@@ -198,7 +217,7 @@ if __name__ == "__main__":
     G.add_edge(agent2, 'd')
     pi = ParetoImprovement(initial_allocation, G, all_items)
     pi.find_pareto_improvement()
-    
+
 
 """
 HW4 Tests:
