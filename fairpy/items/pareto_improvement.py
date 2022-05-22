@@ -15,6 +15,7 @@ Programmer: Shmuel Lavian
 Since:  2022-04
 """
 
+from re import A
 from unittest import result
 import cvxpy
 from fairpy import ValuationMatrix
@@ -59,6 +60,27 @@ class ParetoImprovement:
         OUTPUT:
         * Fractional-Pareto-Optimal (fPO) that improves the former given allocation instance for which
             the allocation graph Gx is acyclic
+
+        >>> agent1 = AdditiveAgent({"a": 10, "b": 100, "c": 80, "d": -100}, name="agent1")
+        >>> agent2 = AdditiveAgent({"a": 20, "b": 100, "c": -40, "d": 10}, name="agent2")
+        >>> all_items  = {'a', 'b', 'c', 'd'}
+        >>> all_agents = [agent1, agent2]
+        >>> initial_allocation = FractionalAllocation(all_agents, [{'a':0.0,'b': 0.3,'c':1.0,'d':0.0},{'a':1.0,'b':0.7,'c':0.0,'d':1.0}])
+        >>> G = nx.Graph()
+        >>> G.add_node(agent1)
+        >>> G.add_node(agent2)
+        >>> G.add_node('a')
+        >>> G.add_node('b')
+        >>> G.add_node('c')
+        >>> G.add_node('d')
+        >>> G.add_edge(agent1, 'b')
+        >>> G.add_edge(agent1, 'c')
+        >>> G.add_edge(agent2, 'a')
+        >>> G.add_edge(agent2, 'b')
+        >>> G.add_edge(agent2, 'd')
+        >>> pi = ParetoImprovement(initial_allocation, G, all_items)
+        >>> pi.find_pareto_improvement().is_complete_allocation()
+        True
         """
         self.__initiate_algorithm_graphs()
         while not self.__is_acyclic():
@@ -72,12 +94,50 @@ class ParetoImprovement:
                     if is_acyclic(self.result_T) and is_acyclic(tmp_result):
                         self.result_T.add_edge(*tmp_edge)
                         self.Gx_complete.remove_edge(*tmp_edge)
-        nx.draw(self.result_T, with_labels = True)
-        plt.show()
-        return self.result_T
+        return self.__convert_result_graph_to_FractionalAllocation()
+
+
+    def __linear_prog_solve(self, edge):
+        """
+        Main linear programming help function which will receive the current allocation
+        and find an optimal set for the current states results according to four mathematical
+        conditions represented in Algorithms 2.
+
+        OUTPUT:
+        * A tuple containing (edge, optimal_value).
+            The edge will be used to create and test the result graph for cycles with or without it
+        """
+        if type(edge[0]) is AdditiveAgent:
+            tmp_alloc = self.__generate_allocation_from_cycle_edge(edge)
+            tmp_mat = convert_FractionalAllocation_to_ValuationMatrix(tmp_alloc)
+
+            # Creates [agens, object] constrained matrix for variable input
+            allocation_vars = cvxpy.Variable((tmp_mat.num_of_agents, tmp_mat.num_of_objects))
+
+            # line 5 in the algorithm, the max condition
+            sum_x = sum(allocation_vars[i][o] * tmp_mat[i][o] for o in tmp_mat.objects() for i in tmp_mat.agents())
+            sum_y = sum(allocation_vars[i][o] * self.val_mat[i][o] for o in self.val_mat.objects() for i in self.val_mat.agents())
+
+            first_constraints = [sum_x >= sum_y]
+            positivity_constraints = [
+                allocation_vars[i][o] >= 0 for i in tmp_mat.agents()
+                for o in tmp_mat.objects()
+            ]
+            feasibility_constraints = [
+                sum([allocation_vars[i][o] for i in tmp_mat.agents()])==1
+                for o in tmp_mat.objects()
+            ]
+            constraints = first_constraints + positivity_constraints + feasibility_constraints
+            problem = cvxpy.Problem(cvxpy.Maximize(sum_x), constraints)
+            opt = problem.solve(
+                #Uncomment next line in order to see all solving comments
+                # verbose=True
+                )
+            return edge, opt
+        return None, None
 
     
-    def generate_allocation_from_cycle_edge(self, edge):
+    def __generate_allocation_from_cycle_edge(self, edge):
         """
         Converts a bipartite graph to a FractionalAllocation object
         This function will be used to prepare the allocation for linear programming
@@ -130,45 +190,29 @@ class ParetoImprovement:
         self.result_T = create_empty_copy(self.Gx_complete, with_data=True)
 
 
-    def __linear_prog_solve(self, edge):
+    def __convert_result_graph_to_FractionalAllocation(self) -> FractionalAllocation:
         """
-        Main linear programming help function which will receive the current allocation
-        and find an optimal set for the current states results according to four mathematical
-        conditions represented in Algorithms 2.
-
-        OUTPUT:
-        * A tuple containing (edge, optimal_value).
-            The edge will be used to create and test the result graph for cycles with or without it
+        Converts the resulting allocation graph T ro a FractionalAllocation
+        object for the main articles algorithm to work on
         """
-        if type(edge[0]) is AdditiveAgent:
-            tmp_alloc = self.generate_allocation_from_cycle_edge(edge)
-            tmp_mat = convert_FractionalAllocation_to_ValuationMatrix(tmp_alloc)
+        result_allocation_list = []
+        for agent in self.agents:
+            tmp_agent_allocation_map = {}
+            for item in self.items:
+                tmp_agent_allocation_map[item] = 0
+            for item in self.result_T.neighbors(agent):
+                tmp_agent_allocation_map[item] = 1
+            result_allocation_list.append(tmp_agent_allocation_map)
+        return FractionalAllocation(self.agents, result_allocation_list)
 
-            # Creates [agens, object] constrained matrix for variable input
-            allocation_vars = cvxpy.Variable((tmp_mat.num_of_agents, tmp_mat.num_of_objects))
 
-            # line 5 in the algorithm, the max condition
-            sum_x = sum(allocation_vars[i][o] * tmp_mat[i][o] for o in tmp_mat.objects() for i in tmp_mat.agents())
-            sum_y = sum(allocation_vars[i][o] * self.val_mat[i][o] for o in self.val_mat.objects() for i in self.val_mat.agents())
-
-            first_constraints = [sum_x >= sum_y]
-            positivity_constraints = [
-                allocation_vars[i][o] >= 0 for i in tmp_mat.agents()
-                for o in tmp_mat.objects()
-            ]
-            feasibility_constraints = [
-                sum([allocation_vars[i][o] for i in tmp_mat.agents()])==1
-                for o in tmp_mat.objects()
-            ]
-            constraints = first_constraints + positivity_constraints + feasibility_constraints
-            problem = cvxpy.Problem(cvxpy.Maximize(sum_x), constraints)
-            opt = problem.solve(
-                #Uncomment this line in order to see all solving comments
-                # verbose=True
-                )
-            # print(opt)
-            return edge, opt
-        return None, None
+def plot_graph(graph):
+    """
+    Draws the received networkx graph, this functon is used for visual 
+    testing during development
+    """
+    nx.draw(graph, with_labels = True)
+    plt.show()
 
 
 def is_acyclic(graph) -> bool:
@@ -203,26 +247,6 @@ if __name__ == "__main__":
     (failures, tests) = doctest.testmod(report=True)
     print("{} failures, {} tests".format(failures, tests))
 
-    agent1 = AdditiveAgent({"a": 10, "b": 100, "c": 80, "d": -100}, name="agent1")
-    agent2 = AdditiveAgent({"a": 20, "b": 100, "c": -40, "d": 10}, name="agent2")
-    all_items  = {'a', 'b', 'c', 'd'}
-    all_agents = [agent1, agent2]
-    initial_allocation = FractionalAllocation(all_agents, 
-    [{'a':0.0,'b': 0.3,'c':1.0,'d':0.0},{'a':1.0,'b':0.7,'c':0.0,'d':1.0}])
-    G = nx.Graph()
-    G.add_node(agent1)
-    G.add_node(agent2)
-    G.add_node('a')
-    G.add_node('b')
-    G.add_node('c')
-    G.add_node('d')
-    G.add_edge(agent1, 'b')
-    G.add_edge(agent1, 'c')
-    G.add_edge(agent2, 'a')
-    G.add_edge(agent2, 'b')
-    G.add_edge(agent2, 'd')
-    pi = ParetoImprovement(initial_allocation, G, all_items)
-    pi.find_pareto_improvement()
 
 
 """
