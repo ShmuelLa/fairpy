@@ -61,6 +61,56 @@ class ParetoImprovement:
         * Fractional-Pareto-Optimal (fPO) that improves the former given allocation instance for which
             the allocation graph Gx is acyclic
 
+        Example 1 (One agent - positive/negative/mixed object allocation, will get everything):
+        >>> agent1 = AdditiveAgent({"x": 1, "y": 2, "z": 4}, name="agent1")
+        >>> agents = [agent1]
+        >>> items_for_func ={'x','y','z'}
+        >>> allocations = FractionalAllocation(agents, [{'x':1.0,'y':1.0, 'z':1.0}])
+        >>> G = nx.Graph()
+        >>> G.add_node(agent1)
+        >>> G.add_node('x')
+        >>> G.add_node('y')
+        >>> G.add_node('z')
+        >>> G.add_edge(agent1, 'x')
+        >>> G.add_edge(agent1, 'y')
+        >>> G.add_edge(agent1, 'z')
+        >>> pi = ParetoImprovement(allocations, G, items_for_func)
+        >>> pi.find_pareto_improvement().is_complete_allocation()
+        True
+
+        >>> agent1 = AdditiveAgent({"x": -1, "y": -2, "z": -4}, name="agent1")
+        >>> agents = [agent1]
+        >>> items_for_func ={'x','y','z'}
+        >>> allocations = FractionalAllocation(agents, [{'x':1.0,'y':1.0, 'z':1.0}])
+        >>> G = nx.Graph()
+        >>> G.add_node(agent1)
+        >>> G.add_node('x')
+        >>> G.add_node('y')
+        >>> G.add_node('z')
+        >>> G.add_edge(agent1, 'x')
+        >>> G.add_edge(agent1, 'y')
+        >>> G.add_edge(agent1, 'z')
+        >>> pi = ParetoImprovement(allocations, G, items_for_func)
+        >>> pi.find_pareto_improvement().is_complete_allocation()
+        True
+
+        >>> agent1 = AdditiveAgent({"x": -1, "y": 2, "z": -4}, name="agent1")
+        >>> agents = [agent1]
+        >>> items_for_func ={'x','y','z'}
+        >>> allocations = FractionalAllocation(agents, [{'x':1.0,'y':1.0, 'z':1.0}])
+        >>> G = nx.Graph()
+        >>> G.add_node(agent1)
+        >>> G.add_node('x')
+        >>> G.add_node('y')
+        >>> G.add_node('z')
+        >>> G.add_edge(agent1, 'x')
+        >>> G.add_edge(agent1, 'y')
+        >>> G.add_edge(agent1, 'z')
+        >>> pi = ParetoImprovement(allocations, G, items_for_func)
+        >>> pi.find_pareto_improvement().is_complete_allocation()
+        True
+        
+        Main algorithm 1 developper test
         >>> agent1 = AdditiveAgent({"a": 10, "b": 100, "c": 80, "d": -100}, name="agent1")
         >>> agent2 = AdditiveAgent({"a": 20, "b": 100, "c": -40, "d": 10}, name="agent2")
         >>> all_items  = {'a', 'b', 'c', 'd'}
@@ -82,6 +132,8 @@ class ParetoImprovement:
         >>> pi.find_pareto_improvement().is_complete_allocation()
         True
         """
+        if len(self.agents) == 1:
+            return self.former_allocation
         self.__initiate_algorithm_graphs()
         while not self.__is_acyclic():
             for edge in self.current_iteration_cycle:
@@ -94,6 +146,7 @@ class ParetoImprovement:
                     if is_acyclic(self.result_T) and is_acyclic(tmp_result):
                         self.result_T.add_edge(*tmp_edge)
                         self.Gx_complete.remove_edge(*tmp_edge)
+        plot_graph(self.result_T)
         return self.__convert_result_graph_to_FractionalAllocation()
 
 
@@ -252,14 +305,7 @@ if __name__ == "__main__":
 """
 HW4 Tests:
 
-Example 1:
->>> agent1 = AdditiveAgent({"a": 2, "b": 4, "c": 3}, name="agent1")
->>> list_of_agents_for_func = [agent1]
->>> items_for_func ={'a','b','c'}
->>> f_alloc = FractionalAllocation(list_of_agents_for_func, [{'a':1.0,'b':1.0, 'c':1.0}])
->>> fpo_alloc = find_pareto_improvement(f_alloc)
->>> print(fpo_alloc)
-agent1's bundle: {a,b,c},  value: 9.0
+
 
 
 >>> agent1 = AdditiveAgent({"a": -2, "b": -4, "c": -3}, name="agent1")
