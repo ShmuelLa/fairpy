@@ -28,6 +28,8 @@ from networkx.classes.function import create_empty_copy
 class ParetoImprovement:
     """
     Main pareto Improvement class, will nest methods in order to calculate pareto improvement.
+    This class will be called from the find_po_and_prop1_allocation function as the 2nd 
+    algorithmic step for improving the allocation
     """
     def __init__(self, fr_allocation: FractionalAllocation, graph: bipartite, items: Bundle):
         """
@@ -119,7 +121,7 @@ class ParetoImprovement:
         >>> pi.find_pareto_improvement().is_complete_allocation()
         True
         
-        Main algorithm 1 developper test
+        Main algorithm 1 developer test
         >>> agent1 = AdditiveAgent({"a": 10, "b": 100, "c": 80, "d": -100}, name="agent1")
         >>> agent2 = AdditiveAgent({"a": 20, "b": 100, "c": -40, "d": 10}, name="agent2")
         >>> all_items  = {'a', 'b', 'c', 'd'}
@@ -150,9 +152,9 @@ class ParetoImprovement:
                 if tmp_edge is None or tmp_opt is None:
                     continue
                 else:
-                    tmp_result = self.result_T
-                    tmp_result.add_edge(*edge)
-                    tmp_edge, tmp_opt2 = self.__linear_prog_solve(edge, tmp_result)
+                    tmp_T = self.result_T
+                    tmp_T.add_edge(*edge)
+                    tmp_edge, tmp_opt2 = self.__linear_prog_solve(edge, tmp_T)
                     if tmp_opt == tmp_opt2:
                         self.result_T.add_edge(*edge)
                         self.Gx_complete.remove_edge(*edge)
@@ -174,8 +176,11 @@ class ParetoImprovement:
             tmp_alloc = self.__generate_allocation_from_cycle_edge(edge)
             tmp_mat = convert_FractionalAllocation_to_ValuationMatrix(tmp_alloc)
 
-            # Creates [agens, object] constrained matrix for variable input
+            # Creates [agents, object] constrained matrix for variable input
             allocation_vars = cvxpy.Variable((tmp_mat.num_of_agents, tmp_mat.num_of_objects))
+
+            # need allocation vars for each allocation
+            # can pass y as an argument
 
             # line 5 in the algorithm, the max condition
             sum_x = sum(allocation_vars[i][o] * tmp_mat[i][o] for o in tmp_mat.objects() for i in tmp_mat.agents())
@@ -190,6 +195,8 @@ class ParetoImprovement:
                 sum([allocation_vars[i][o] for i in tmp_mat.agents()])==1
                 for o in tmp_mat.objects()
             ]
+
+            # turn t to set() 
             result_fragmentation_constraints = [
                 not is_acyclic(result_graph)
             ]
@@ -199,6 +206,9 @@ class ParetoImprovement:
                 #Uncomment next line in order to see all solving comments
                 # verbose=True
                 )
+
+            # don't need edge
+            # from allocation vars we can create new GX
             return edge, opt
         return None, None
 
@@ -210,7 +220,7 @@ class ParetoImprovement:
         calculation.
 
         This function also makes sure that the result is not fragmented 
-        as required by the linear solving algporithm conditions
+        as required by the linear solving algorithm conditions
         """
         former_alloc_map = self.former_allocation.map_item_to_fraction
         for agent in self.agents:
@@ -227,7 +237,7 @@ class ParetoImprovement:
         """
         A helper function which checks if a given bipartite graph has cycles
         it will be used in every iteration in the main algorithms core while loop
-        this class method is especialy used in order to save each iteration cycle
+        this class method is especially used in order to save each iteration cycle
         for edge testing in the algorithm
         """
         try:
@@ -239,7 +249,7 @@ class ParetoImprovement:
 
     def __initiate_algorithm_graphs(self):
         """
-        A helper function that recevies the current item allocation between agents and 
+        A helper function that receives the current item allocation between agents and 
         creates a complete bipartite graph from them connection all agents with all 
         resources. 
         This function will be used for initializing the main class function.
@@ -261,9 +271,12 @@ class ParetoImprovement:
         Converts the resulting allocation graph T to a FractionalAllocation
         object for the main articles algorithm to work on
 
-        This method will be called at the end of the parteo imprvement
+        This method will be called at the end of the parteo improvement
         algorithm in order to convert the receiving graph T to an allocation object
         """
+        # for edge in self.result_T.edges():
+        #     print(edge)
+        #     print()
         result_allocation_list = []
         for agent in self.agents:
             tmp_agent_allocation_map = {}
@@ -277,7 +290,7 @@ class ParetoImprovement:
 
 def plot_graph(graph):
     """
-    Draws the received networkx graph, this functon is used for visual 
+    Draws the received networkx graph, this function is used for visual 
     testing during development
     """
     nx.draw(graph, with_labels = True)
