@@ -15,14 +15,12 @@ Programmer: Shmuel Lavian
 Since:  2022-04
 """
 
-from re import A
-from unittest import result
 import cvxpy
 from fairpy import ValuationMatrix
 import matplotlib.pyplot as plt
 import networkx as nx
 from fairpy.agents import AdditiveAgent, Bundle
-from fairpy.items.allocations_fractional import FractionalAllocation, get_items_of_agent_in_alloc, get_value_of_agent_in_alloc
+from fairpy.items.allocations_fractional import FractionalAllocation
 from networkx.algorithms import bipartite, find_cycle
 from networkx.classes.function import create_empty_copy
 
@@ -148,20 +146,21 @@ class ParetoImprovement:
         self.__initiate_algorithm_graphs()
         while not self.__is_acyclic():
             for edge in self.current_iteration_cycle:
-                tmp_edge, tmp_iptimum = self.__linear_prog_solve(edge)
-                if tmp_edge is None or tmp_iptimum is None:
+                tmp_edge, tmp_opt = self.__linear_prog_solve(edge, self.result_T)
+                if tmp_edge is None or tmp_opt is None:
                     continue
                 else:
                     tmp_result = self.result_T
-                    tmp_result.add_edge(*tmp_edge)
-                    if is_acyclic(self.result_T) and is_acyclic(tmp_result):
-                        self.result_T.add_edge(*tmp_edge)
-                        self.Gx_complete.remove_edge(*tmp_edge)
+                    tmp_result.add_edge(*edge)
+                    tmp_edge, tmp_opt2 = self.__linear_prog_solve(edge, tmp_result)
+                    if tmp_opt == tmp_opt2:
+                        self.result_T.add_edge(*edge)
+                        self.Gx_complete.remove_edge(*edge)
         # plot_graph(self.result_T)
         return self.__convert_result_graph_to_FractionalAllocation()
 
 
-    def __linear_prog_solve(self, edge):
+    def __linear_prog_solve(self, edge, result_graph):
         """
         Main linear programming help function which will receive the current allocation
         and find an optimal set for the current states results according to four mathematical
@@ -191,7 +190,10 @@ class ParetoImprovement:
                 sum([allocation_vars[i][o] for i in tmp_mat.agents()])==1
                 for o in tmp_mat.objects()
             ]
-            constraints = first_constraints + positivity_constraints + feasibility_constraints
+            result_fragmentation_constraints = [
+                not is_acyclic(result_graph)
+            ]
+            constraints = first_constraints + positivity_constraints + feasibility_constraints + result_fragmentation_constraints
             problem = cvxpy.Problem(cvxpy.Maximize(sum_x), constraints)
             opt = problem.solve(
                 #Uncomment next line in order to see all solving comments
@@ -256,8 +258,11 @@ class ParetoImprovement:
 
     def __convert_result_graph_to_FractionalAllocation(self) -> FractionalAllocation:
         """
-        Converts the resulting allocation graph T ro a FractionalAllocation
+        Converts the resulting allocation graph T to a FractionalAllocation
         object for the main articles algorithm to work on
+
+        This method will be called at the end of the parteo imprvement
+        algorithm in order to convert the receiving graph T to an allocation object
         """
         result_allocation_list = []
         for agent in self.agents:
