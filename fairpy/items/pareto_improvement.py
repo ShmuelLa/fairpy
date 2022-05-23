@@ -299,13 +299,54 @@ def is_acyclic(graph) -> bool:
 def convert_FractionalAllocation_to_ValuationMatrix(allocation: FractionalAllocation) -> ValuationMatrix:
     """
     A helper function that converts a FractionalAllocation object to ValuationMatrix
-    This function is used to prepare the matrix parameters for the linear solving process 
+    This function is used to prepare the matrix parameters for the linear solving process
+
+
+    >>> agent1 = AdditiveAgent({"x": 1, "y": 2, "z": 4}, name="agent1")
+    >>> agents = [agent1]
+    >>> items_for_func ={'x','y','z'}
+    >>> allocations = FractionalAllocation(agents, [{'x':1.0,'y':1.0, 'z':1.0}])
+    >>> mat = convert_FractionalAllocation_to_ValuationMatrix(allocations)
+    >>> mat[0,0]
+    1
+    >>> mat[0,1]
+    2
+    >>> mat[0][1]
+    2
+    >>> mat[0,2]
+    4
+    >>> mat
+    [[1 2 4]]
+    >>> mat.agent_value_for_bundle(0, [0, 1, 2])
+    7
+    >>> mat.agent_value_for_bundle(0, [0, 2])
+    5
+
+    >>> agent1 = AdditiveAgent({"x": 1, "y": 2, "z": 4}, name="agent1")
+    >>> agent2 = AdditiveAgent({"x": 5, "y": -2, "z": 7}, name="agent2")
+    >>> agents = [agent1, agent2]
+    >>> items_for_func ={'x','y','z'}
+    >>> allocations = FractionalAllocation(agents, [{'x':1.0,'y':0, 'z':1.0}, {'x':0,'y':1.0, 'z':0}])
+    >>> mat = convert_FractionalAllocation_to_ValuationMatrix(allocations)
+    >>> mat
+    [[ 1  2  4]
+     [ 5 -2  7]]
+    >>> mat[1,0]
+    5
+    >>> mat[1][1]
+    -2
+    >>> mat[1,2]
+    7
+    >>> mat.agent_value_for_bundle(1, [0, 1, 2])
+    10
     """
     matrix_allocation_list = []
-    for agent_alloc in allocation.map_item_to_fraction:
+    agent_index = 0
+    for agent_valuations in allocation.map_item_to_fraction:
         agent_alloc_list = []
-        for _, alloc in agent_alloc.items():
-            agent_alloc_list.append(alloc)
+        for item, _ in agent_valuations.items():
+            agent_alloc_list.append(allocation.agents[agent_index].value({item}))
+        agent_index += 1
         matrix_allocation_list.append(agent_alloc_list)
     v_mat = ValuationMatrix(matrix_allocation_list)
     return v_mat
