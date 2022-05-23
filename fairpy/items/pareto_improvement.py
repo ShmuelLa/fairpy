@@ -38,12 +38,10 @@ class ParetoImprovement:
         """
         self.former_allocation = fr_allocation
         self.agents = fr_allocation.agents
-        self.former_graph = graph
         self.items = items
         self.Gx_complete = None
         self.result_T = None
         self.current_iteration_cycle = None
-        self.init_complete_allocation = None
         self.val_mat = convert_FractionalAllocation_to_ValuationMatrix(self.former_allocation)
 
 
@@ -109,6 +107,60 @@ class ParetoImprovement:
         >>> pi = ParetoImprovement(allocations, G, items_for_func)
         >>> pi.find_pareto_improvement().is_complete_allocation()
         True
+
+        Example 2 (3rd example from the article)
+        >>> agent1 = AdditiveAgent({"a": 10, "b": 100, "c": 80, "d": -100}, name="agent1")
+        >>> agent2 = AdditiveAgent({"a": 20, "b": 100, "c": -40, "d": 10}, name="agent2")
+        >>> G = nx.Graph()
+        >>> agents = [agent1, agent2]
+        >>> items = {'a', 'b', 'c', 'd'}
+        >>> G.add_nodes_from(agents + list(items))
+        >>> G.add_edges_from([[agent1, 'b'], [agent1, 'c'], [agent2, 'a'], [agent2, 'b'], [agent2, 'd']])
+        >>> allocations = FractionalAllocation(agents, [{'a':0.0,'b':0.3,'c':1.0,'d':0.0},{'a':1.0,'b':0.7,'c':0.0,'d':1.0}])
+        >>> pi = ParetoImprovement(allocations, G, items)
+        >>> pi.find_pareto_improvement().is_complete_allocation()
+        True
+
+        # Time consuming 
+        # >>> agent1= AdditiveAgent({"a": 100, "b": 10, "c": 50, "d": 100 ,"e": 70,"f": 100, "g": 300, "h": 40, "i": 30}, name="agent1")
+        # >>> agent2= AdditiveAgent({"a": 20, "b": 20, "c": 40, "d": 90 ,"e": 90,"f": 100, "g": 30, "h": 80, "i": 90}, name="agent2")
+        # >>> agent3= AdditiveAgent({"a": 10, "b": 30, "c": 30, "d": 40 ,"e": 180,"f": 100, "g": 300, "h": 20, "i": 90}, name="agent3")
+        # >>> agent4= AdditiveAgent({"a": 200, "b": 40, "c": 20, "d": 80 ,"e": 300,"f": 100, "g": 30, "h": 60, "i": 180}, name="agent4")
+        # >>> agent5= AdditiveAgent({"a": 50, "b": 50, "c": 10, "d": 60 ,"e": 90,"f": 100, "g": 300, "h": 120, "i": 180}, name="agent5")
+        # >>> agents = [agent1, agent2, agent3, agent4, agent5]
+        # >>> items = {'a','b','c','d','e','f','g','h','i'}
+        # >>> allocations = FractionalAllocation(agents, [{'a':0.0,'b':0.0,'c':1.0,'d':1.0,'e':0.0,'f':0.2,'g':0.0,'h':0.0,'i':0.0},{'a':0.0,'b':0.0,'c':0.0,'d':0.0,'e':0.8,'f':0.4,'g':0.0,'h':0.0,'i':0.0},{'a':0.0,'b':0.0,'c':0.0,'d':0.0,'e':0.0,'f':0.2,'g':1.0,'h':0.0,'i':0.0},{'a':1.0,'b':0.0,'c':0.0,'d':0.0,'e':0.2,'f':0.0,'g':0.0,'h':0.0,'i':0.0},{'a':0.0,'b':1.0,'c':0.0,'d':0.0,'e':0.0,'f':0.2,'g':0.0,'h':1.0,'i':1.0}])
+        # >>> G = nx.Graph()
+        # >>> G.add_node(agent1)
+        # >>> G.add_node(agent2)
+        # >>> G.add_node(agent3)
+        # >>> G.add_node(agent4)
+        # >>> G.add_node(agent5)
+        # >>> G.add_node('a')
+        # >>> G.add_node('b')
+        # >>> G.add_node('c')
+        # >>> G.add_node('d')
+        # >>> G.add_node('e')
+        # >>> G.add_node('f')
+        # >>> G.add_node('g')
+        # >>> G.add_node('h')
+        # >>> G.add_node('i')
+        # >>> G.add_edge(agent1, 'c')
+        # >>> G.add_edge(agent1, 'd')
+        # >>> G.add_edge(agent1, 'f')
+        # >>> G.add_edge(agent2, 'e')
+        # >>> G.add_edge(agent2, 'f')
+        # >>> G.add_edge(agent3, 'f')
+        # >>> G.add_edge(agent3, 'g')
+        # >>> G.add_edge(agent4, 'a')
+        # >>> G.add_edge(agent4, 'e')
+        # >>> G.add_edge(agent5, 'b')
+        # >>> G.add_edge(agent5, 'h')
+        # >>> G.add_edge(agent5, 'i')
+        # >>> G.add_edge(agent5, 'f')
+        # >>> pi = ParetoImprovement(allocations, G, items)
+        # >>> pi.find_pareto_improvement().is_complete_allocation()
+        # True
         
         Main algorithm 1 developper test
         >>> agent1 = AdditiveAgent({"a": 10, "b": 100, "c": 80, "d": -100}, name="agent1")
@@ -146,7 +198,7 @@ class ParetoImprovement:
                     if is_acyclic(self.result_T) and is_acyclic(tmp_result):
                         self.result_T.add_edge(*tmp_edge)
                         self.Gx_complete.remove_edge(*tmp_edge)
-        plot_graph(self.result_T)
+        # plot_graph(self.result_T)
         return self.__convert_result_graph_to_FractionalAllocation()
 
 
@@ -299,46 +351,3 @@ if __name__ == "__main__":
     import doctest
     (failures, tests) = doctest.testmod(report=True)
     print("{} failures, {} tests".format(failures, tests))
-
-
-
-"""
-HW4 Tests:
-
-
-
-
->>> agent1 = AdditiveAgent({"a": -2, "b": -4, "c": -3}, name="agent1")
->>> list_of_agents_for_func = [agent1]
->>> items_for_func ={'a','b','c'}
->>> f_alloc = FractionalAllocation(list_of_agents_for_func, [{'a':1.0,'b':1.0, 'c':1.0}])
->>> fpo_alloc = find_pareto_improvement(f_alloc)
->>> print(fpo_alloc)
-agent1's bundle: {a,b,c},  value: -9.0
-
-
-Example 2:
->>> agent1 = AdditiveAgent({"a": 1, "b1": 1, "b2": 1}, name="agent1")
->>> agent2 = AdditiveAgent({"a": 1, "b1": 1, "b2": 1}, name="agent2")
->>> all_agents = [agent1, agent2]
->>> all_items = {'a', 'b1', 'b2'}
->>> f_alloc = FractionalAllocation(all_agents, [{"a": 0.5, "b1": 0.25, "b2": 0.25},{"a": 0.4, "b1": 0.3, "b2": 0.3}])
->>> fpo_alloc = find_pareto_improvement(f_alloc)
->>> print(fpo_alloc)
-agent1's bundle: {a},  value: 0.5
-agent2's bundle: {b},  value: 0.6
-
-
-Example 3:
->>> agent1 = AdditiveAgent({"a": 1, "b": 1, "c": 1.3}, name="agent1")
->>> agent2 = AdditiveAgent({"a": 1, "b": 1, "c": 1.3}, name="agent2")
->>> agent3 = AdditiveAgent({"a": 1, "b": 1, "c": 1.3}, name="agent3")
->>> all_agents = [agent1, agent2, agent3]
->>> all_items = {'a', 'b', 'c'}
->>> f_alloc = FractionalAllocation(all_agents, [{"a": 0.2, "b": 0.3, "c": 0.5},{"a": 0.4, "b": 0.1, "c": 0.5},{"a": 0.4, "b": 0.4, "c": 0.5}])
->>> fpo_alloc = find_pareto_improvement(f_alloc)
->>> print(fpo_alloc)
-agent1's bundle: {c},  value: 0.5
-agent2's bundle: {a},  value: 0.4
-agent3's bundle: {b},  value: 0.4
-"""
