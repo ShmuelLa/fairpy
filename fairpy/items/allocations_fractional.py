@@ -69,9 +69,9 @@ class FractionalAllocation:
     def __init__(self, agents: List[AdditiveAgent], map_item_to_fraction: List[dict]):
         if len(agents) != len(map_item_to_fraction):
             raise Exception("The amount of agents differs from the dictionaries that represent how much each agent received from each item.")
-        elif check_input(map_item_to_fraction):
-            self.agents = agents
-            self.map_item_to_fraction = map_item_to_fraction
+        # elif check_input(map_item_to_fraction):
+        self.agents = agents
+        self.map_item_to_fraction = map_item_to_fraction
 
     # A method that calculates the value of the whole allocation. Returns float number.
     def value_of_fractional_allocation(self) -> float:

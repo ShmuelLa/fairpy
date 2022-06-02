@@ -25,33 +25,9 @@
 #         {'a':0.0,'b':0.0,'c':1.0,'d':0.0,'e':0.0,'f':0,'g':1.0,'h':0.0,'i':0.0},
 #         {'a':0.0,'b':0.0,'c':0.0,'d':0.0,'e':0.0,'f':0.0,'g':0.0,'h':0.0,'i':0.0},
 #         {'a':1.0,'b':0.0,'c':0.0,'d':0.0,'e':0.0,'f':0.0,'g':0.0,'h':0.0,'i':0.6}])
-#     G = nx.Graph()
-#     G.add_node(agent1)
-#     G.add_node(agent2)
-#     G.add_node(agent3)
-#     G.add_node(agent4)
-#     G.add_node(agent5)
-#     G.add_node('a')
-#     G.add_node('b')
-#     G.add_node('c')
-#     G.add_node('d')
-#     G.add_node('e')
-#     G.add_node('f')
-#     G.add_node('g')
-#     G.add_node('h')
-#     G.add_node('i')
-#     G.add_edge(agent1, 'e')
-#     G.add_edge(agent1, 'b')
-#     G.add_edge(agent1, 'f')
-#     G.add_edge(agent1, 'i')
-#     G.add_edge(agent2, 'd')
-#     G.add_edge(agent2, 'h')
-#     G.add_edge(agent3, 'c')
-#     G.add_edge(agent3, 'g')
-#     G.add_edge(agent5, 'a')
-#     G.add_edge(agent5, 'i')
-#     pi = ParetoImprovement(alloc_y_for_func, G, items_for_func)
+#     pi = ParetoImprovement(alloc_y_for_func, items_for_func)
 #     assert pi.find_pareto_improvement().is_complete_allocation() == True
+#     print(pi.find_pareto_improvement())
 
 
 # if __name__ == "__main__":
