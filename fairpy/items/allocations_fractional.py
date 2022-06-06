@@ -9,6 +9,8 @@ Since: 2021-02
 """
 
 from typing import *
+
+from numpy import char
 from fairpy.agents import AdditiveAgent, Bundle
 
 
@@ -81,6 +83,22 @@ class FractionalAllocation:
                 result += agent_value
         return result
 
+    def get_agent_fraction(self, agent: AdditiveAgent, item: str) -> float:
+        """
+        Return an agents item fraction allocation part 
+        from the current allocation
+
+        Args:
+            agent (AdditiveAgent): object of the current agent
+            item (_type_): name of the current item
+
+        Returns:
+            float: the part of the current item allocation from 0 to 1
+        """
+        for i_agent, cur_agent in enumerate(self.agents):
+            if cur_agent == agent:
+                return self.map_item_to_fraction[i_agent][item]
+
     # A method that tests whether the allocation is complete (since all fractions are 0.0 or 1.0)
     def is_complete_allocation(self) -> bool:
         for d in self.map_item_to_fraction:
@@ -96,7 +114,8 @@ class FractionalAllocation:
         else:
             result = ""
             for i_agent, agent in enumerate(self.agents):
-                agent_bundle = stringify_bundle(get_items_of_agent_in_alloc(self.map_item_to_fraction[i_agent]))
+                # agent_bundle = stringify_bundle(get_items_of_agent_in_alloc(self.map_item_to_fraction[i_agent]))
+                agent_bundle = stringify_bundle2(self.map_item_to_fraction[i_agent])
                 agent_value = get_value_of_agent_in_alloc(self.agents[i_agent].valuation.map_good_to_value, self.map_item_to_fraction[i_agent])
                 result += "{}'s bundle: {},  value: {}\n".format(agent.name(),  agent_bundle, agent_value)
             return result
@@ -195,6 +214,21 @@ def stringify_bundle(bundle: Bundle):
     '{x,y}'
     """
     return "{" + ",".join(sorted(bundle)) + "}"
+    # return ",".join(["".join(item) for item in bundle])
+
+
+def stringify_bundle2(allocation_dict: dict):
+    """
+    Convert a bundle where each item is a character to a compact string representation.
+    For testing purposes only.
+
+    This method adds the allocation part to the item as well, not just the name
+
+    """
+    result = "{"
+    for item, alloc in allocation_dict.items():
+        result += str(item) + ": " + str(alloc) + ", "
+    return result[:-2] + "}"
     # return ",".join(["".join(item) for item in bundle])
 
 

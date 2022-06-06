@@ -18,6 +18,7 @@ Since:  2022-04
 import cvxpy
 import matplotlib.pyplot as plt
 import networkx as nx
+from numpy import indices
 
 from fairpy import ValuationMatrix
 from allocation_matrix import AllocationMatrix
@@ -45,6 +46,8 @@ class ParetoImprovement:
         self.x_allocations = {}
         self.current_iteration_cycle = None
         self.val_mat = convert_FractionalAllocation_to_ValuationMatrix(self.former_allocation)
+        self.agent_indices = {}
+        self.item_indices = {}
 
 
     def find_pareto_improvement(self) -> FractionalAllocation:
@@ -108,7 +111,7 @@ class ParetoImprovement:
         """
         if len(self.agents) == 1:
             return self.former_allocation
-        self.Gx, self.x_allocations = convert_FractionalAllocation_to_graph(self.former_allocation, True)
+        self.Gx, self.x_allocations, self.agent_indices, self.item_indices = convert_FractionalAllocation_to_graph(self.former_allocation, True)
         while not self.__is_acyclic():
             for edge in self.current_iteration_cycle:
                 tmp_opt = self.__linear_prog_solve(self.result_T)
@@ -119,11 +122,33 @@ class ParetoImprovement:
                 if tmp_opt == tmp_opt2:
                     # add_edge_to_set(edge, self.result_T, self.Gx_complete.get_edge_data(edge[0], edge[1])['weight'])
                     self.result_T.add(edge)
-            self.Gx, self.x_allocations = convert_FractionalAllocation_to_graph(
+            self.Gx, self.x_allocations, self.agent_indices, self.item_indices = convert_FractionalAllocation_to_graph(
                 allocation=convert_set_to_FractionalAllocation(self.agents, self.x_allocations, self.result_T),
                 complete_flag=False)
             # print(self.result_T)
         return convert_set_to_FractionalAllocation(self.agents, self.x_allocations, self.result_T)
+
+    # def find_pareto_improvement2(self) -> FractionalAllocation:
+    #     # V2 With cycle edge removals:
+    #     if len(self.agents) == 1:
+    #         return self.former_allocation
+    #     self.Gx, self.x_allocations = convert_FractionalAllocation_to_graph(self.former_allocation, True)
+    #     while not self.__is_acyclic():
+    #         for edge in self.current_iteration_cycle:
+    #             tmp_opt = self.__linear_prog_solve(self.result_T)
+    #             tmp_T = self.result_T
+    #             # tmp_T = add_edge_to_set(edge, tmp_T, self.Gx_complete.get_edge_data(edge[0], edge[1])['weight'])
+    #             tmp_T.add(edge)
+    #             tmp_opt2 = self.__linear_prog_solve(tmp_T)
+    #             if tmp_opt == tmp_opt2:
+    #                 # add_edge_to_set(edge, self.result_T, self.Gx_complete.get_edge_data(edge[0], edge[1])['weight'])
+    #                 self.result_T.add(edge)
+    #                 self.Gx.remove_edge(edge[0], edge[1])
+    #         _, self.x_allocations = convert_FractionalAllocation_to_graph(
+    #             allocation=convert_set_to_FractionalAllocation(self.agents, self.x_allocations, self.result_T),
+    #             complete_flag=False)
+    #         # print(self.result_T)
+    #     return convert_set_to_FractionalAllocation(self.agents, self.x_allocations, self.result_T)
 
 
     def __linear_prog_solve(self, result_set: set) -> float:
@@ -139,68 +164,57 @@ class ParetoImprovement:
         y_former_valuation_mat = convert_FractionalAllocation_to_ValuationMatrix(self.former_allocation)
         y_former_allocation_mat = AllocationMatrix(self.former_allocation)
 
-        if len(result_set) != 0:
-            x_valuation_mat = convert_FractionalAllocation_to_ValuationMatrix(convert_set_to_FractionalAllocation(self.agents ,self.x_allocations ,result_set))
-            x_allocation_matrix = AllocationMatrix(convert_set_to_FractionalAllocation(self.agents ,self.x_allocations ,result_set))
-        else:
-            x_valuation_mat = convert_FractionalAllocation_to_ValuationMatrix(self.former_allocation)
-            x_allocation_matrix = AllocationMatrix(self.former_allocation)
+        # if len(result_set) != 0:
+        #     x_valuation_mat = convert_FractionalAllocation_to_ValuationMatrix(convert_set_to_FractionalAllocation(self.agents ,self.x_allocations ,result_set))
+        #     x_allocation_matrix = AllocationMatrix(convert_set_to_FractionalAllocation(self.agents ,self.x_allocations ,result_set))
+        # else:
+        #     x_valuation_mat = convert_FractionalAllocation_to_ValuationMatrix(self.former_allocation)
+        #     x_allocation_matrix = AllocationMatrix(self.former_allocation)
 
         
         # Creates [agents, object] constrained matrix for variable input
 
-        x_allocation_vars = cvxpy.Variable((x_valuation_mat.num_of_agents, x_valuation_mat.num_of_objects))
+        x_allocation_vars = cvxpy.Variable((self.val_mat.num_of_agents, self.val_mat.num_of_objects))
 
-        # x_allocation_vars = [[cvxpy.Variable() for i in self.agents] for o in self.items]
 
-        # y_former_allocation_vars = cvxpy.Variable((y_former_valuation_mat.num_of_agents, y_former_valuation_mat.num_of_objects))
+        sum_x = [sum(x_allocation_vars[i][o] * self.val_mat[i][o] for o in self.val_mat.objects()) for i in self.val_mat.agents()]
+        sum_y = [sum(y_former_allocation_mat[i][o] * self.val_mat[i][o] for o in self.val_mat.objects()) for i in self.val_mat.agents()]
 
-        # line 5 in the algorithm, the max condition
-        sum_x = sum(x_allocation_vars[i][o] * x_allocation_matrix[i][o] * x_valuation_mat[i][o] for o in x_valuation_mat.objects() for i in x_valuation_mat.agents())
-        sum_y = sum(y_former_allocation_mat[i][o] * self.val_mat[i][o] for o in self.val_mat.objects() for i in self.val_mat.agents())
+        first_constraints = [sum_x[i] >= sum_y[i] for i in self.val_mat.agents()]
 
-        # print(x_allocation_vars)
-        # print([x_allocation_vars[i][o] for o in x_valuation_mat.objects() for i in x_valuation_mat.agents()])
-
-        # first_constraints = [sum_x[i] >= sum_y[i] for i in self.val_mat.agents()]
-
-        first_constraints = [sum_x >= sum_y]
-        
-        # Second linear condition
         feasibility_constraints = [
-            sum([x_allocation_vars[i][o] for i in x_valuation_mat.agents()]) == 1
-            for o in x_valuation_mat.objects()
+            sum([x_allocation_vars[i][o] for i in self.val_mat.agents()]) == 1
+            for o in self.val_mat.objects()
         ]
 
         positivity_constraints = [
             x_allocation_vars[i][o] >= 0 
-            for i in x_valuation_mat.agents()
-            for o in x_valuation_mat.objects()
+            for i in self.val_mat.agents()
+            for o in self.val_mat.objects()
         ]
 
+        zero_constraints = []
+        for edge in result_set:
+            i, o = None, None
+            if type(edge[0]) == AdditiveAgent:
+                i = self.agent_indices[edge[0]]
+                o = self.item_indices[edge[1]]
+            else:
+                i = self.agent_indices[edge[1]]
+                o = self.item_indices[edge[0]]
+            zero_constraints.append(x_allocation_vars[i][o]==0)
 
-        result_fragmentation_constraints = [
-            x_allocation_vars[i][o] == 0
-            for i in x_allocation_matrix.agents()
-            for o in x_allocation_matrix.objects()
-        ]
+        constraints = first_constraints + positivity_constraints + feasibility_constraints + zero_constraints + [sum(sum_x)<=1000]
 
-        # result_fragmentation_constraints = [
-        #     x_allocation_vars[i][o] == 0
-        #     get_x_allocation_value(self.x_allocations, edge) == 0 
-        #     for edge in result_set
-
-        #     # d = {(i,o): x_allocation_vars[i][o] for i in agents for o in objects}
-
-        # ]
-
-        constraints = first_constraints + positivity_constraints + feasibility_constraints + result_fragmentation_constraints
-        problem = cvxpy.Problem(cvxpy.Maximize(sum_x), constraints)
-        opt = problem.solve(
+        problem = cvxpy.Problem(cvxpy.Maximize(sum(sum_x)), constraints)
+        problem.solve(
             #Uncomment next line in order to see all solving comments
             # verbose=True
             )
-        return opt
+        if not problem.status=="optimal": 
+            raise ValueError(f"Problem status is {problem.status}")
+        # x_allocation_values = [[x_allocation_vars[i][o].value for o in x_valuation_mat.objects()] for i in x_valuation_mat.agents()]
+        return problem.value
 
     
     # def __linear_prog_solve2(self, result_set: set) -> float:
@@ -299,7 +313,7 @@ def convert_FractionalAllocation_to_graph(allocation: FractionalAllocation, comp
     >>> agent1 = AdditiveAgent({'x':1, 'y':2, 'z':3}, name="agent1")
     >>> agent2 = AdditiveAgent({'x':3, 'y':2, 'z':1}, name="agent2")
     >>> allocation = FractionalAllocation([agent1, agent2], [{'x':0.5, 'y':0.5, 'z':0.5},{'x':0.5, 'y':0.5, 'z':0.5}])
-    >>> gx, x_alloc  = convert_FractionalAllocation_to_graph(allocation, True)
+    >>> gx, x_alloc, agents_i, items_i  = convert_FractionalAllocation_to_graph(allocation, True)
     >>> bipartite.is_bipartite(gx)
     True
     >>> for k, v in x_alloc.items():
@@ -310,8 +324,18 @@ def convert_FractionalAllocation_to_graph(allocation: FractionalAllocation, comp
     (agent2 is an agent with a Additive valuation: x=3 y=2 z=1., 'x') 0.5
     (agent2 is an agent with a Additive valuation: x=3 y=2 z=1., 'y') 0.5
     (agent2 is an agent with a Additive valuation: x=3 y=2 z=1., 'z') 0.5
+    >>> agents_i[agent1]
+    0
+    >>> agents_i[agent2]
+    1
+    >>> items_i['x']
+    0
+    >>> items_i['y']
+    1
+    >>> items_i['z']
+    2
     >>> allocation = FractionalAllocation([agent1, agent2], [{'x':0.5, 'y':1, 'z':0.5},{'x':0.5, 'y':0, 'z':0.5}])
-    >>> gx, x_alloc  = convert_FractionalAllocation_to_graph(allocation, False)
+    >>> gx, x_alloc, agents_i, items_i  = convert_FractionalAllocation_to_graph(allocation, False)
     >>> bipartite.is_bipartite(gx)
     True
     >>> for k, v in x_alloc.items():
@@ -330,7 +354,7 @@ def convert_FractionalAllocation_to_graph(allocation: FractionalAllocation, comp
     (agent2 is an agent with a Additive valuation: x=3 y=2 z=1., 'x')
     (agent2 is an agent with a Additive valuation: x=3 y=2 z=1., 'z')
     >>> allocation = FractionalAllocation([agent1, agent2], [{'x':0, 'y':1, 'z':0},{'x':1, 'y':0, 'z':1}])
-    >>> gx, x_alloc  = convert_FractionalAllocation_to_graph(allocation, False)
+    >>> gx, x_alloc, agents_i, items_i  = convert_FractionalAllocation_to_graph(allocation, False)
     >>> bipartite.is_bipartite(gx)
     True
     >>> for edge in gx.edges():
@@ -341,29 +365,21 @@ def convert_FractionalAllocation_to_graph(allocation: FractionalAllocation, comp
     """
     Gx = nx.Graph()
     x_allocations = {}
+    agent_indices = {}
+    item_indices = {}
     items = allocation.map_item_to_fraction[0].keys()
-    if complete_flag:
-        for agent in allocation.agents:
-            Gx.add_node(agent)
+    for i ,agent in enumerate(allocation.agents):
+        Gx.add_node(agent)
+        agent_indices[agent] = i
+    for i, object in enumerate(items):
+        Gx.add_node(object)
+        item_indices[object] = i
+    for agent in allocation.agents:
         for object in items:
-            Gx.add_node(object)
-        for agent in allocation.agents:
-            for object in items:
+            x_allocations[(agent, object)] = get_agent_fraction(allocation, agent, object)
+            if complete_flag or get_x_allocation_value(x_allocations, (agent, object)) > 0:
                 Gx.add_edge(agent, object)
-                x_allocations[(agent, object)] = get_agent_fraction(allocation, agent, object)
-        return Gx, x_allocations
-    else:
-        for agent in allocation.agents:
-            Gx.add_node(agent)
-        for object in items:
-            Gx.add_node(object)
-        for agent in allocation.agents:
-            for object in items:
-                x_allocations[(agent, object)] = get_agent_fraction(allocation, agent, object)
-                if get_x_allocation_value(x_allocations, (agent, object)) > 0:
-                    Gx.add_edge(agent, object)
-        return Gx, x_allocations
-
+    return Gx, x_allocations, agent_indices, item_indices
 
     
 def convert_set_to_FractionalAllocation(agents: list, x_allocations: dict, allocation_set: set) -> FractionalAllocation:
@@ -383,8 +399,8 @@ def convert_set_to_FractionalAllocation(agents: list, x_allocations: dict, alloc
     >>> agents = [agent1, agent2]
     >>> allocation = convert_set_to_FractionalAllocation(agents, x_allocations, test_set)
     >>> allocation
-    agent1's bundle: {x},  value: 1
-    agent2's bundle: {y,z},  value: 3
+    agent1's bundle: {x: 1, y: 0, z: 0},  value: 1
+    agent2's bundle: {x: 0, y: 1, z: 1},  value: 3
     <BLANKLINE>
     """
     allocation_list = []
@@ -473,7 +489,6 @@ def get_agent_fraction(allocation: FractionalAllocation, agent: AdditiveAgent, i
     Return an agents item fraction allocation part 
     in a FRactionalAllocation object
 
-    TODO This function needs to be implemented in the FractionalAllocation module
 
     >>> agent3 = AdditiveAgent({'x':1, 'y':-2, 'z':3}, name="agent3")
     >>> agent4 = AdditiveAgent({'x':3, 'y':2, 'z':-1}, name="agent4")
@@ -552,8 +567,8 @@ if __name__ == "__main__":
     agent2 = AdditiveAgent({"a": 20, "b": 100, "c": -40, "d": 10}, name="agent2")
     all_items  = {'a', 'b', 'c', 'd'}
     all_agents = [agent1, agent2]
-    initial_allocation = FractionalAllocation(all_agents, [{'a':0.0,'b': 0.3,'c':1.0,'d':0.0},{'a':1.0,'b':0.7,'c':0.0,'d':1.0}])
+    initial_allocation = FractionalAllocation(all_agents, [{'a':1.0,'b': 0.3,'c':0.5,'d':0.0},{'a':0.0,'b':0.7,'c':0.5,'d':1.0}])
+    print(initial_allocation)
     pi = ParetoImprovement(initial_allocation, all_items)
     # pi.find_pareto_improvement().is_complete_allocation()
     print(pi.find_pareto_improvement())
-    
