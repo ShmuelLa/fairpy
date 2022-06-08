@@ -15,10 +15,9 @@ Programmer: Shmuel Lavian
 Since:  2022-04
 """
 
-import cvxpy
+import cvxpy, numpy as np
 import matplotlib.pyplot as plt
 import networkx as nx
-from numpy import indices
 
 from fairpy import ValuationMatrix
 from allocation_matrix import AllocationMatrix
@@ -87,13 +86,18 @@ def find_pareto_improvement(allocations: FractionalAllocation) -> FractionalAllo
     Gx, x_allocations, agent_indices, item_indices = convert_FractionalAllocation_to_graph(allocations, True)
     current_iteration_cycle = is_acyclic(Gx)
     while current_iteration_cycle is not None:
-        for edge in current_iteration_cycle:
-            tmp_opt = linear_prog_solve(result_T, allocations, agent_indices, item_indices)
-            tmp_T = result_T
-            tmp_T.add(edge)
-            tmp_opt2 = linear_prog_solve(tmp_T, allocations, agent_indices, item_indices)
-            if tmp_opt == tmp_opt2:
-                result_T.add(edge)
+        opt_T = linear_prog_solve(result_T, allocations, agent_indices, item_indices)
+        print(f"opt_T = {opt_T}")
+        for edge in current_iteration_cycle:  # "If there exists some (i,o) in C such that opt_T = opt_[T+(i,o)]..."
+            if type(edge[0]) == AdditiveAgent:
+                print(f"edge = {edge}")
+                opt_T_plus_edge = linear_prog_solve(result_T.union({edge}), allocations, agent_indices, item_indices)
+                print(f"opt_T_plus_edge = {opt_T_plus_edge}")
+                if np.allclose(opt_T, opt_T_plus_edge):
+                    result_T.add(edge)
+                    print(f"Adding edge {edge} to T")
+                    # Here, we have to update "allocations" according to the values of the "X" variables from the linear programming solution.
+                    break
         Gx, x_allocations, agent_indices, item_indices = convert_FractionalAllocation_to_graph(
             allocation=convert_set_to_FractionalAllocation(allocations.agents, x_allocations, result_T),
             complete_flag=False)
@@ -145,8 +149,8 @@ def linear_prog_solve(result_set: set, former_allocation: FractionalAllocation, 
         #Uncomment next line in order to see all solving comments
         # verbose=True
         )
-    if not problem.status=="optimal": 
-        raise ValueError(f"Problem status is {problem.status}")
+    # if not problem.status=="optimal": 
+    #     raise ValueError(f"Problem status is {problem.status}")
     # x_allocation_values = [[x_allocation_vars[i][o].value for o in x_valuation_mat.objects()] for i in x_valuation_mat.agents()]
     return problem.value
 
