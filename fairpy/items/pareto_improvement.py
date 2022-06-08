@@ -27,106 +27,49 @@ from fairpy.items.allocations_fractional import FractionalAllocation
 from networkx.algorithms import find_cycle, bipartite
 
 
-class ParetoImprovement:
-    """
-    Main pareto Improvement class, will nest methods in order to calculate pareto improvement.
-    This class will be called from the find_po_and_prop1_allocation function as the 2nd 
-    algorithmic step for improving the allocation
-    """
-    def __init__(self, fr_allocation: FractionalAllocation, items: Bundle):
-        """
-        These are the main loops and values for linear programming inputs 
-        that are stored for later calculation and testing.
-        """
-        self.former_allocation = fr_allocation
-        self.agents = fr_allocation.agents
-        self.items = items
-        self.Gx = None
-        self.result_T = set()
-        self.x_allocations = {}
-        self.current_iteration_cycle = None
-        self.val_mat = convert_FractionalAllocation_to_ValuationMatrix(self.former_allocation)
-        self.agent_indices = {}
-        self.item_indices = {}
+# class ParetoImprovement:
+#     """
+#     Main pareto Improvement class, will nest methods in order to calculate pareto improvement.
+#     This class will be called from the find_po_and_prop1_allocation function as the 2nd 
+#     algorithmic step for improving the allocation
+#     """
+#     def __init__(self, fr_allocation: FractionalAllocation, items: Bundle):
+#         """
+#         These are the main loops and values for linear programming inputs 
+#         that are stored for later calculation and testing.
+#         """
+#         self.former_allocation = fr_allocation
+#         self.agents = fr_allocation.agents
+#         self.items = items
+#         self.Gx = None
+#         self.result_T = set()
+#         self.x_allocations = {}
+#         self.current_iteration_cycle = None
+#         self.val_mat = convert_FractionalAllocation_to_ValuationMatrix(self.former_allocation)
+#         self.agent_indices = {}
+#         self.item_indices = {}
 
 
-    def find_pareto_improvement(self) -> FractionalAllocation:
-        """
-        This is the modules main function which implements the 2nd algorithm presented in the article and is used as the
-        second stage in the po_and_prop1_allocation algorithm.
+    # def find_pareto_improvement(self) -> FractionalAllocation:
 
-        INPUT:
-        * fpo_alloc: A Pareto-optimal (PO) allocation corresponding to the given consumption graph.
-            The allocation is an allocation instance that includes sets of:
-            (Agents, Objects and their corresponding allocation)
-
-        OUTPUT:
-        * Fractional-Pareto-Optimal (fPO) that improves the former given allocation instance for which
-            the allocation graph Gx is acyclic
-
-        Example 1 (One agent - positive/negative/mixed object allocation, will get everything):
-        >>> agent1 = AdditiveAgent({"x": 1, "y": 2, "z": 4}, name="agent1")
-        >>> agents = [agent1]
-        >>> items_for_func ={'x','y','z'}
-        >>> allocations = FractionalAllocation(agents, [{'x':1.0,'y':1.0, 'z':1.0}])
-        >>> pi = ParetoImprovement(allocations, items_for_func)
-        >>> pi.find_pareto_improvement().is_complete_allocation()
-        True
-
-        >>> agent1 = AdditiveAgent({"x": -1, "y": -2, "z": -4}, name="agent1")
-        >>> agents = [agent1]
-        >>> items_for_func ={'x','y','z'}
-        >>> allocations = FractionalAllocation(agents, [{'x':1.0,'y':1.0, 'z':1.0}])
-        >>> pi = ParetoImprovement(allocations, items_for_func)
-        >>> pi.find_pareto_improvement().is_complete_allocation()
-        True
-
-        >>> agent1 = AdditiveAgent({"x": -1, "y": 2, "z": -4}, name="agent1")
-        >>> agents = [agent1]
-        >>> items_for_func ={'x','y','z'}
-        >>> allocations = FractionalAllocation(agents, [{'x':1.0,'y':1.0, 'z':1.0}])
-        >>> pi = ParetoImprovement(allocations, items_for_func)
-        >>> pi.find_pareto_improvement().is_complete_allocation()
-        True
-
-        Example 2 (3rd example from the article)
-        >>> agent1 = AdditiveAgent({"a": 10, "b": 100, "c": 80, "d": -100}, name="agent1")
-        >>> agent2 = AdditiveAgent({"a": 20, "b": 100, "c": -40, "d": 10}, name="agent2")
-        >>> agents = [agent1, agent2]
-        >>> items = {'a', 'b', 'c', 'd'}
-        >>> allocations = FractionalAllocation(agents, [{'a':0.0,'b':0.3,'c':1.0,'d':0.0},{'a':1.0,'b':0.7,'c':0.0,'d':1.0}])
-        >>> pi = ParetoImprovement(allocations, items)
-        >>> pi.find_pareto_improvement().is_complete_allocation()
-        True
-        
-        Main algorithm 1 developer test
-        >>> agent1 = AdditiveAgent({"a": 10, "b": 100, "c": 80, "d": -100}, name="agent1")
-        >>> agent2 = AdditiveAgent({"a": 20, "b": 100, "c": -40, "d": 10}, name="agent2")
-        >>> all_items  = {'a', 'b', 'c', 'd'}
-        >>> all_agents = [agent1, agent2]
-        >>> initial_allocation = FractionalAllocation(all_agents, [{'a':0.0,'b': 0.3,'c':1.0,'d':0.0},{'a':1.0,'b':0.7,'c':0.0,'d':1.0}])
-        >>> pi = ParetoImprovement(initial_allocation, all_items)
-        >>> pi.find_pareto_improvement().is_complete_allocation()
-        True
-        """
-        if len(self.agents) == 1:
-            return self.former_allocation
-        self.Gx, self.x_allocations, self.agent_indices, self.item_indices = convert_FractionalAllocation_to_graph(self.former_allocation, True)
-        while not self.__is_acyclic():
-            for edge in self.current_iteration_cycle:
-                tmp_opt = self.__linear_prog_solve(self.result_T)
-                tmp_T = self.result_T
-                # tmp_T = add_edge_to_set(edge, tmp_T, self.Gx_complete.get_edge_data(edge[0], edge[1])['weight'])
-                tmp_T.add(edge)
-                tmp_opt2 = self.__linear_prog_solve(tmp_T)
-                if tmp_opt == tmp_opt2:
-                    # add_edge_to_set(edge, self.result_T, self.Gx_complete.get_edge_data(edge[0], edge[1])['weight'])
-                    self.result_T.add(edge)
-            self.Gx, self.x_allocations, self.agent_indices, self.item_indices = convert_FractionalAllocation_to_graph(
-                allocation=convert_set_to_FractionalAllocation(self.agents, self.x_allocations, self.result_T),
-                complete_flag=False)
-            # print(self.result_T)
-        return convert_set_to_FractionalAllocation(self.agents, self.x_allocations, self.result_T)
+    #     if len(self.agents) == 1:
+    #         return self.former_allocation
+    #     self.Gx, self.x_allocations, self.agent_indices, self.item_indices = convert_FractionalAllocation_to_graph(self.former_allocation, True)
+    #     while not self.__is_acyclic():
+    #         for edge in self.current_iteration_cycle:
+    #             tmp_opt = self.__linear_prog_solve(self.result_T)
+    #             tmp_T = self.result_T
+    #             # tmp_T = add_edge_to_set(edge, tmp_T, self.Gx_complete.get_edge_data(edge[0], edge[1])['weight'])
+    #             tmp_T.add(edge)
+    #             tmp_opt2 = self.__linear_prog_solve(tmp_T)
+    #             if tmp_opt == tmp_opt2:
+    #                 # add_edge_to_set(edge, self.result_T, self.Gx_complete.get_edge_data(edge[0], edge[1])['weight'])
+    #                 self.result_T.add(edge)
+    #         self.Gx, self.x_allocations, self.agent_indices, self.item_indices = convert_FractionalAllocation_to_graph(
+    #             allocation=convert_set_to_FractionalAllocation(self.agents, self.x_allocations, self.result_T),
+    #             complete_flag=False)
+    #         # print(self.result_T)
+    #     return convert_set_to_FractionalAllocation(self.agents, self.x_allocations, self.result_T)
 
     # def find_pareto_improvement2(self) -> FractionalAllocation:
     #     # V2 With cycle edge removals:
@@ -151,70 +94,62 @@ class ParetoImprovement:
     #     return convert_set_to_FractionalAllocation(self.agents, self.x_allocations, self.result_T)
 
 
-    def __linear_prog_solve(self, result_set: set) -> float:
-        """
-        Main linear programming help function which will receive the current allocation
-        and find an optimal set for the current states results according to four mathematical
-        conditions represented in Algorithms 2.
+    # def __linear_prog_solve(self, result_set: set) -> float:
 
-        OUTPUT:
-        * A tuple containing (edge, optimal_value).
-            The edge will be used to create and test the result graph for cycles with or without it
-        """
-        y_former_valuation_mat = convert_FractionalAllocation_to_ValuationMatrix(self.former_allocation)
-        y_former_allocation_mat = AllocationMatrix(self.former_allocation)
+    #     y_former_valuation_mat = convert_FractionalAllocation_to_ValuationMatrix(self.former_allocation)
+    #     y_former_allocation_mat = AllocationMatrix(self.former_allocation)
 
-        # if len(result_set) != 0:
-        #     x_valuation_mat = convert_FractionalAllocation_to_ValuationMatrix(convert_set_to_FractionalAllocation(self.agents ,self.x_allocations ,result_set))
-        #     x_allocation_matrix = AllocationMatrix(convert_set_to_FractionalAllocation(self.agents ,self.x_allocations ,result_set))
-        # else:
-        #     x_valuation_mat = convert_FractionalAllocation_to_ValuationMatrix(self.former_allocation)
-        #     x_allocation_matrix = AllocationMatrix(self.former_allocation)
+    #     # if len(result_set) != 0:
+    #     #     x_valuation_mat = convert_FractionalAllocation_to_ValuationMatrix(convert_set_to_FractionalAllocation(self.agents ,self.x_allocations ,result_set))
+    #     #     x_allocation_matrix = AllocationMatrix(convert_set_to_FractionalAllocation(self.agents ,self.x_allocations ,result_set))
+    #     # else:
+    #     #     x_valuation_mat = convert_FractionalAllocation_to_ValuationMatrix(self.former_allocation)
+    #     #     x_allocation_matrix = AllocationMatrix(self.former_allocation)
 
         
-        # Creates [agents, object] constrained matrix for variable input
+    #     # Creates [agents, object] constrained matrix for variable input
 
-        x_allocation_vars = cvxpy.Variable((self.val_mat.num_of_agents, self.val_mat.num_of_objects))
+    #     x_allocation_vars = cvxpy.Variable((self.val_mat.num_of_agents, self.val_mat.num_of_objects))
 
 
-        sum_x = [sum(x_allocation_vars[i][o] * self.val_mat[i][o] for o in self.val_mat.objects()) for i in self.val_mat.agents()]
-        sum_y = [sum(y_former_allocation_mat[i][o] * self.val_mat[i][o] for o in self.val_mat.objects()) for i in self.val_mat.agents()]
+    #     sum_x = [sum(x_allocation_vars[i][o] * self.val_mat[i][o] for o in self.val_mat.objects()) for i in self.val_mat.agents()]
+    #     sum_y = [sum(y_former_allocation_mat[i][o] * self.val_mat[i][o] for o in self.val_mat.objects()) for i in self.val_mat.agents()]
 
-        first_constraints = [sum_x[i] >= sum_y[i] for i in self.val_mat.agents()]
+    #     first_constraints = [sum_x[i] >= sum_y[i] for i in self.val_mat.agents()]
 
-        feasibility_constraints = [
-            sum([x_allocation_vars[i][o] for i in self.val_mat.agents()]) == 1
-            for o in self.val_mat.objects()
-        ]
+    #     feasibility_constraints = [
+    #         sum([x_allocation_vars[i][o] for i in self.val_mat.agents()]) == 1
+    #         for o in self.val_mat.objects()
+    #     ]
 
-        positivity_constraints = [
-            x_allocation_vars[i][o] >= 0 
-            for i in self.val_mat.agents()
-            for o in self.val_mat.objects()
-        ]
+    #     positivity_constraints = [
+    #         x_allocation_vars[i][o] >= 0 
+    #         for i in self.val_mat.agents()
+    #         for o in self.val_mat.objects()
+    #     ]
 
-        zero_constraints = []
-        for edge in result_set:
-            i, o = None, None
-            if type(edge[0]) == AdditiveAgent:
-                i = self.agent_indices[edge[0]]
-                o = self.item_indices[edge[1]]
-            else:
-                i = self.agent_indices[edge[1]]
-                o = self.item_indices[edge[0]]
-            zero_constraints.append(x_allocation_vars[i][o]==0)
+    #     zero_constraints = []
+    #     for edge in result_set:
+    #         i, o = None, None
+    #         if type(edge[0]) == AdditiveAgent:
+    #             i = self.agent_indices[edge[0]]
+    #             o = self.item_indices[edge[1]]
+    #         else:
+    #             i = self.agent_indices[edge[1]]
+    #             o = self.item_indices[edge[0]]
+    #         zero_constraints.append(x_allocation_vars[i][o]==0)
 
-        constraints = first_constraints + positivity_constraints + feasibility_constraints + zero_constraints + [sum(sum_x)<=1000]
+    #     constraints = first_constraints + positivity_constraints + feasibility_constraints + zero_constraints + [sum(sum_x)<=1000]
 
-        problem = cvxpy.Problem(cvxpy.Maximize(sum(sum_x)), constraints)
-        problem.solve(
-            #Uncomment next line in order to see all solving comments
-            # verbose=True
-            )
-        if not problem.status=="optimal": 
-            raise ValueError(f"Problem status is {problem.status}")
-        # x_allocation_values = [[x_allocation_vars[i][o].value for o in x_valuation_mat.objects()] for i in x_valuation_mat.agents()]
-        return problem.value
+    #     problem = cvxpy.Problem(cvxpy.Maximize(sum(sum_x)), constraints)
+    #     problem.solve(
+    #         #Uncomment next line in order to see all solving comments
+    #         # verbose=True
+    #         )
+    #     if not problem.status=="optimal": 
+    #         raise ValueError(f"Problem status is {problem.status}")
+    #     # x_allocation_values = [[x_allocation_vars[i][o].value for o in x_valuation_mat.objects()] for i in x_valuation_mat.agents()]
+    #     return problem.value
 
     
     # def __linear_prog_solve2(self, result_set: set) -> float:
@@ -249,22 +184,145 @@ class ParetoImprovement:
     #                 if x_allocation_matrix[i, o] == 0:
     #                     return
 
+    # def __is_acyclic(self) -> bool:
+    #     """
+    #     A helper function which checks if a given bipartite graph has cycles
+    #     it will be used in every iteration in the main algorithms core while loop
+    #     this class method is especially used in order to save each iteration cycle
+    #     for edge testing in the algorithm
 
-    def __is_acyclic(self) -> bool:
-        """
-        A helper function which checks if a given bipartite graph has cycles
-        it will be used in every iteration in the main algorithms core while loop
-        this class method is especially used in order to save each iteration cycle
-        for edge testing in the algorithm
+    #     Returns:
+    #         bool: True if self Gx graph is acyclic False otherwise
+    #     """
+    #     try:
+    #         self.current_iteration_cycle = find_cycle(self.Gx)
+    #         return False
+    #     except nx.NetworkXNoCycle:
+    #         return True
 
-        Returns:
-            bool: True if self Gx graph is acyclic False otherwise
-        """
-        try:
-            self.current_iteration_cycle = find_cycle(self.Gx)
-            return False
-        except nx.NetworkXNoCycle:
-            return True
+def find_pareto_improvement(allocations: FractionalAllocation) -> FractionalAllocation:
+    """
+    This is the modules main function which implements the 2nd algorithm presented in the article and is used as the
+    second stage in the po_and_prop1_allocation algorithm.
+
+    INPUT:
+    * fpo_alloc: A Pareto-optimal (PO) allocation corresponding to the given consumption graph.
+        The allocation is an allocation instance that includes sets of:
+        (Agents, Objects and their corresponding allocation)
+
+    OUTPUT:
+    * Fractional-Pareto-Optimal (fPO) that improves the former given allocation instance for which
+        the allocation graph Gx is acyclic
+
+    Example 1 (One agent - positive/negative/mixed object allocation, will get everything):
+    >>> agent1 = AdditiveAgent({"x": 1, "y": 2, "z": 4}, name="agent1")
+    >>> agents = [agent1]
+    >>> items_for_func ={'x','y','z'}
+    >>> allocations = FractionalAllocation(agents, [{'x':1.0,'y':1.0, 'z':1.0}])
+    >>> find_pareto_improvement(allocations)
+    True
+
+    >>> agent1 = AdditiveAgent({"x": -1, "y": -2, "z": -4}, name="agent1")
+    >>> agents = [agent1]
+    >>> items_for_func ={'x','y','z'}
+    >>> allocations = FractionalAllocation(agents, [{'x':1.0,'y':1.0, 'z':1.0}])
+    >>> find_pareto_improvement(allocations)
+    True
+
+    >>> agent1 = AdditiveAgent({"x": -1, "y": 2, "z": -4}, name="agent1")
+    >>> agents = [agent1]
+    >>> items_for_func ={'x','y','z'}
+    >>> allocations = FractionalAllocation(agents, [{'x':1.0,'y':1.0, 'z':1.0}])
+    >>> find_pareto_improvement(allocations)
+    True
+
+    Example 2 (3rd example from the article)
+    >>> agent1 = AdditiveAgent({"a": 10, "b": 100, "c": 80, "d": -100}, name="agent1")
+    >>> agent2 = AdditiveAgent({"a": 20, "b": 100, "c": -40, "d": 10}, name="agent2")
+    >>> agents = [agent1, agent2]
+    >>> items = {'a', 'b', 'c', 'd'}
+    >>> allocations = FractionalAllocation(agents, [{'a':0.0,'b':0.3,'c':1.0,'d':0.0},{'a':1.0,'b':0.7,'c':0.0,'d':1.0}])
+    >>> find_pareto_improvement(allocations)
+    True
+    
+    Main algorithm 1 developer test
+    >>> agent1 = AdditiveAgent({"a": 10, "b": 100, "c": 80, "d": -100}, name="agent1")
+    >>> agent2 = AdditiveAgent({"a": 20, "b": 100, "c": -40, "d": 10}, name="agent2")
+    >>> all_items  = {'a', 'b', 'c', 'd'}
+    >>> all_agents = [agent1, agent2]
+    >>> initial_allocation = FractionalAllocation(all_agents, [{'a':0.0,'b': 0.3,'c':1.0,'d':0.0},{'a':1.0,'b':0.7,'c':0.0,'d':1.0}])
+    >>> find_pareto_improvement(initial_allocation)
+    True
+    """
+    if len(allocations.agents) == 1:
+        return allocations
+    result_T = set()
+    Gx, x_allocations, agent_indices, item_indices = convert_FractionalAllocation_to_graph(allocations, True)
+    current_iteration_cycle = is_acyclic(Gx)
+    while current_iteration_cycle is not None:
+        for edge in current_iteration_cycle:
+            tmp_opt = linear_prog_solve(result_T, allocations, agent_indices, item_indices)
+            tmp_T = result_T
+            tmp_T.add(edge)
+            tmp_opt2 = linear_prog_solve(tmp_T, allocations, agent_indices, item_indices)
+            if tmp_opt == tmp_opt2:
+                result_T.add(edge)
+        Gx, x_allocations, agent_indices, item_indices = convert_FractionalAllocation_to_graph(
+            allocation=convert_set_to_FractionalAllocation(allocations.agents, x_allocations, result_T),
+            complete_flag=False)
+        current_iteration_cycle = is_acyclic(Gx)
+    return convert_set_to_FractionalAllocation(allocations.agents, x_allocations, result_T)
+
+
+def linear_prog_solve(result_set: set, former_allocation: FractionalAllocation, agent_indices, item_indices) -> float:
+    """
+    Main linear programming help function which will receive the current allocation
+    and find an optimal set for the current states results according to four mathematical
+    conditions represented in Algorithms 2.
+
+    OUTPUT:
+    * A tuple containing (edge, optimal_value).
+        The edge will be used to create and test the result graph for cycles with or without it
+    """
+    y_former_allocation_mat = AllocationMatrix(former_allocation)
+    val_mat = convert_FractionalAllocation_to_ValuationMatrix(former_allocation)
+    # Creates [agents, object] constrained matrix for variable input
+    x_allocation_vars = cvxpy.Variable((val_mat.num_of_agents, val_mat.num_of_objects))
+
+    sum_x = [sum(x_allocation_vars[i][o] * val_mat[i][o] for o in val_mat.objects()) for i in val_mat.agents()]
+    sum_y = [sum(y_former_allocation_mat[i][o] * val_mat[i][o] for o in val_mat.objects()) for i in val_mat.agents()]
+
+    first_constraints = [sum_x[i] >= sum_y[i] for i in val_mat.agents()]
+    feasibility_constraints = [
+        sum([x_allocation_vars[i][o] for i in val_mat.agents()]) == 1
+        for o in val_mat.objects()
+    ]
+    positivity_constraints = [
+        x_allocation_vars[i][o] >= 0 
+        for i in val_mat.agents()
+        for o in val_mat.objects()
+    ]
+    zero_constraints = []
+    for edge in result_set:
+        i, o = None, None
+        if type(edge[0]) == AdditiveAgent:
+            i = agent_indices[edge[0]]
+            o = item_indices[edge[1]]
+        else:
+            i = agent_indices[edge[1]]
+            o = item_indices[edge[0]]
+        zero_constraints.append(x_allocation_vars[i][o]==0)
+    constraints = first_constraints + positivity_constraints + feasibility_constraints + zero_constraints + [sum(sum_x)<=1000]
+    problem = cvxpy.Problem(cvxpy.Maximize(sum(sum_x)), constraints)
+    problem.solve(
+        #Uncomment next line in order to see all solving comments
+        # verbose=True
+        )
+    if not problem.status=="optimal": 
+        raise ValueError(f"Problem status is {problem.status}")
+    # x_allocation_values = [[x_allocation_vars[i][o].value for o in x_valuation_mat.objects()] for i in x_valuation_mat.agents()]
+    return problem.value
+
 
 
 def get_x_allocation_value(x_allocations: dict, edge: tuple) -> float:
@@ -442,10 +500,10 @@ def is_acyclic(graph) -> bool:
     this function will be used to check the result graph for cycles
     """
     try:
-        find_cycle(graph)
-        return False
+        cycle = find_cycle(graph)
+        return cycle
     except nx.NetworkXNoCycle:
-        return True
+        return None
 
 
 def convert_edge_set_to_nxGraph(set_T: set) -> nx.Graph:
@@ -569,6 +627,6 @@ if __name__ == "__main__":
     all_agents = [agent1, agent2]
     initial_allocation = FractionalAllocation(all_agents, [{'a':1.0,'b': 0.3,'c':0.5,'d':0.0},{'a':0.0,'b':0.7,'c':0.5,'d':1.0}])
     print(initial_allocation)
-    pi = ParetoImprovement(initial_allocation, all_items)
+    # pi = ParetoImprovement(initial_allocation, all_items)
     # pi.find_pareto_improvement().is_complete_allocation()
-    print(pi.find_pareto_improvement())
+    print(find_pareto_improvement(initial_allocation))
